@@ -1,6 +1,7 @@
 import scala.math
 import scala.collection.mutable._
 import scala.io.Source
+import java.io._
 
 case class MyDouble(a:Double, i:Integer = 0)
 {
@@ -17,12 +18,8 @@ case class MyDouble(a:Double, i:Integer = 0)
 
 object Main extends App
 {
-	//val trnData = new ListBuffer[ListBuffer[Double]]
-	val testdata = new ListBuffer[ListBuffer[Double]]
+	val trnData = Source.fromFile("training.txt" ).getLines.toList.map(x => x.split("\t").toList)
 
-	val trnData = Source.fromFile("test.txt" ).getLines.toList.map(x => x.split("\t").toList)
-
-	val typeCount = 2//!!!!!!??
 	val featureCount = trnData(0).length - 1
 
 
@@ -31,6 +28,7 @@ object Main extends App
 
 	val dictionary = trnData.groupBy(_(0))
 
+	val typeCount = dictionary.count(p=>true)
 	for((category,array) <- dictionary)
 	{
 		var fIndex = 0
@@ -50,24 +48,48 @@ object Main extends App
 	def stringList2DoubleList(il: List[String]): List[Double] = il.map(_.toDouble)
 
 	/////////////test/////////////////////
-	
-	val inputList = List(450, 130, 10)
+	val testdata = Source.fromFile("test.txt" ).getLines.toList.map(x => x.split("\t").toList)
 
-	def loop_getTypePro(n:Integer, t:Integer,  i:MyDouble):MyDouble = 
+	loop_predictAllData()
+
+	def loop_predictAllData()
+	{
+		var writer = new PrintWriter(new File("out.txt"))
+		var fIndex = 0
+		for( fIndex <- 0 to testdata.length - 1)
+		{
+			val ttt = loop_findMax(typeCount - 1, MyDouble(Double.MinValue), fIndex)
+			
+			writer.write(getactualTypeName(ttt))
+			var m = 0
+			for(m <- 1 to testdata(fIndex).length - 1 )
+			{
+				writer.write("\t" + testdata(fIndex)(m))
+			}
+			writer.write("\n")
+
+		}
+		writer.close()
+
+		println("Finish")
+
+	}
+
+	def loop_getTypePro(n:Integer, t:Integer,  i:MyDouble, testDataNo:Integer):MyDouble = 
 	{
 		val index = n + t * featureCount
-		val m = MyDouble(getP(meanList(index), varianceList(index), inputList(n)), t)
 
+		val m = MyDouble(getP(meanList(index), varianceList(index), testdata(testDataNo).tail(n).toDouble), t)
 
 		if(n >= 1)
-			loop_getTypePro(n - 1, t, i.mul(m))
+			loop_getTypePro(n - 1, t, i.mul(m), testDataNo)
 		else
 			i.mul(m)
 	}
 
-	def loop_findMax(n:Integer, i:MyDouble):MyDouble = 
+	def loop_findMax(n:Integer, i:MyDouble, testDataNo:Integer):MyDouble = 
 	{
-		val m = loop_getTypePro(featureCount - 1, n, MyDouble(1.0, n))
+		val m = loop_getTypePro(featureCount - 1, n, MyDouble(1.0, n), testDataNo)
 
 /*
 		var p = 0
@@ -82,13 +104,10 @@ object Main extends App
 			p = p + 1
 		}
 */
-
-
 		if(n >= 1)
-			loop_findMax(n - 1, i.max(m))
+			loop_findMax(n - 1, i.max(m), testDataNo)
 		else
 			i.max(m)
-
 	}
 
 	def getactualTypeName(m:MyDouble):String = 
@@ -99,8 +118,8 @@ object Main extends App
 		{
 			if(p == m.i)
 			{
-				println("" + category)
-				println("P" + (m.a / 2))
+				//println("" + category)
+				//println("P" + (m.a / 2))
 
 				result = category
 			}
@@ -120,8 +139,4 @@ object Main extends App
 	}
 	def extractIndex(v:List[Double], i:Int) = List(v(i))
 	def div(next:Double,mean:Double) = List( (next-mean)*(next-mean))
-
-	val ttt = loop_findMax(typeCount - 1, MyDouble(Double.MinValue))
-	println( ttt.a + "   " +  getactualTypeName(ttt))
-
 }
