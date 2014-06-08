@@ -15,6 +15,10 @@ local.properties
 .classpath
 .settings/
 .loadpath
+sbt-launch.jar
+target/
+run.bat
+
 
 # External tool builders
 .externalToolBuilders/
