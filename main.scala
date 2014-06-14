@@ -1,7 +1,6 @@
 import scala.math
 import scala.collection.mutable._
 import scala.io.Source
-import java.io._
 
 case class MyDouble(a:Double, i:Integer = 0)
 {
@@ -18,9 +17,11 @@ case class MyDouble(a:Double, i:Integer = 0)
 
 object Main extends App
 {
-	val isContinue = true
+	println("Continue or Discrete?(C/D)")
+	import sys.process._
+	val c = Console.in.read
 
-	if(isContinue)
+	if(c == 99 || c == 67)
 		ContinueNB
 	else
 		DiscreteNB
@@ -28,130 +29,78 @@ object Main extends App
 
 object DiscreteNB
 {
-  val trndata=new ListBuffer[Pair[String,ListBuffer[Boolean]]]// can't use this, Stream or something else
-  val vocabulary =new ListBuffer[String]
-  val model =new ListBuffer[ListBuffer[Double]]
-  val priors=new ListBuffer[Double]
-  val labels=new ListBuffer[String]
-  Train("TRAIN321.txt")
-  Test("TEST321.txt")
-  
-  def parseTrain(name:String)={
-    val str = Source.fromFile(name )("UTF-8").getLines.toList.map(x => x.split("\t").toList.distinct)
-    
-    for(i <-0 to str.length-1){
-      
-      for(j <- 1 to str(i).length-1){
-        if(!vocabulary.contains(str(i)(j)))
-          vocabulary+=str(i)(j)
-      }
-      var tmp=vocabulary.map(f=>false)
-      for(j <- 1 to str(i).length-1)
-    	  tmp(vocabulary.indexOf(str(i)(j)))=true
-      trndata+=new Pair[String,ListBuffer[Boolean]](str(i)(0),tmp)
-    }
-  }
-  def extractIndex(v:ListBuffer[Boolean],i:Int) = if (i<v.length) List( v(i)) else List(false)
-  def assignModel(i:Int,array:ListBuffer[Pair[String,ListBuffer[Boolean]]]):Unit={
-    if(i<vocabulary.length){
-      var boolAry=array.flatMap(f=>extractIndex(f._2,i))
-      model.last+=boolAry.count(p=>p==true)/array.length.toDouble
-      assignModel(i+1,array)
-    }
-  }
-  
-  def Train(name:String)={
-    parseTrain(name)
-    for((category,array)<-trndata.groupBy(_._1)){
-	    model+=ListBuffer[Double]()
-	    assignModel(0,array)
-	    priors+=array.length/trndata.length.toDouble
-	    labels+=category
+
+	val str = Source.fromFile("TRAIN321.txt")("UTF-8").getLines.toList.map(x => x.split('\t').toList.distinct)
+	val vocabulary =str.map(f=>f.drop(1)).flatMap(f=>f).distinct
+	val trndata=(0 to str.length-1).map(f=>Pair[String,List[Boolean]](str(f)(0),(0 to vocabulary.length-1).toList.map(g=>str(f).drop(1).contains(vocabulary(g)))))
+
+	def extractIndex(v:List[Boolean],i:Int) = if (i<v.length) List( v(i)) else List(false)
+	val model = trndata.groupBy(_._1).map(f=>(0 to vocabulary.length-1).map(g=>f._2.flatMap(h=>extractIndex(h._2,g)).count(p=>p==true)/f._2.length.toDouble)).toList
+	val priors = trndata.groupBy(_._1).map(f=>f._2.length/trndata.length.toDouble).toList
+	val labels = trndata.groupBy(_._1).map(f=>f._1).toList
+	  
+	Test("TEST321.txt")
+	  
+	def posteriorprob(prob:Double,i:Int,category:Int,testdata:List[Boolean]):Double = {
+	if(i<vocabulary.length){
+		val nextprob=if(testdata(i)==true)	model(category)(i) else (1-model(category)(i))
+		posteriorprob(prob*nextprob,i+1,category,testdata)
 	}
-  }
-  
-  
-  
-  
-  def posteriorprob(prob:Double,i:Int,category:Int,testdata:ListBuffer[Boolean]):Double = {
-    if(i<vocabulary.length){
-    	val nextprob=if(testdata(i)==true)	model(category)(i) else (1-model(category)(i))
-    	posteriorprob(prob*nextprob,i+1,category,testdata)
-    }
-    else
-    	prob
-  }
+	else
+		prob
+	}
 
-  def CategoryofMaxProb(category:Int,index:Int,max:Double,testdata:ListBuffer[Boolean]):Int={
-
-    if(index<priors.length){
-      val current=priors(index)*posteriorprob(1.0,0,index,testdata)
-      if (current> max)
-        CategoryofMaxProb(index,index+1,current,testdata)
-      else
-        CategoryofMaxProb(category,index+1,current,testdata)
-    }
-    else
-      category
-  }
-
-	def Test(name:String)={val str = Source.fromFile(name)("UTF-8").getLines.toList.map(x => x.split("\t").toList.distinct)
-
-	var writer = new PrintWriter(new File("out2.txt"))
-	val trnData = Source.fromFile(name)("UTF-8").getLines.toList.map(x => x.split("\t").toList)
-    for(i <-0 to str.length-1)
-    {
-		var testdata=vocabulary.map(f=>false)
-		for(j <- 1 to str(i).length-1)
-			if (vocabulary.indexOf(str(i)(j)) != -1)
-				testdata(vocabulary.indexOf(str(i)(j)))=true
-		for(category <- 0 to priors.length-1){
-			println(priors(category)*posteriorprob(1.0,0,category,testdata))
-		}
-
-		writer.write(labels(CategoryofMaxProb(0,0,0.0,testdata)))
-
-		var m = 0
-		for(m <- 1 to trnData(i).length - 1)
+	def CategoryofMaxProb(category:Int,index:Int,max:Double,testdata:List[Boolean]):Int=
+	{
+		if(index<priors.length)
 		{
-			writer.write("\t" + trnData(i)(m))
+	  		val current=priors(index)*posteriorprob(1.0,0,index,testdata)
+	  		if (current> max)
+				CategoryofMaxProb(index,index+1,current,testdata)
+	  		else
+	    		CategoryofMaxProb(category,index+1,current,testdata)
 		}
-		writer.write("\n")
-		
+		else
+			category
+	}
 
-    }
-    writer.close()
-  }
+	def Test(name:String)=
+	{
+		import java.io._
+		var writer = new PrintWriter(new File("out2.txt"))
+		val str = Source.fromFile(name)("UTF-8").getLines.toList.map(x => x.split("\t").toList.distinct)
+		for( j <-0 to str.length-1)
+		{
+			writer.write((0 to str.length-1).toList.map(f=>labels(CategoryofMaxProb(0,0,0.0,(0 to vocabulary.length-1).toList.map(g=>str(f).drop(1).contains(vocabulary(g)))))).toList(j)+"\t")
+			str(j).drop(1).foreach(f=>writer.write(f+"\t"))
+			writer.write('\n')
+		}
+
+		writer.close()
+	}
 }
+
 
 object ContinueNB
 {
 	val trnData = Source.fromFile("training.txt" ).getLines.toList.map(x => x.split("\t").toList)
 	val featureCount = trnData(0).length - 1
-
-	val meanList = ListBuffer[Double]()
-	val varianceList = ListBuffer[Double]()
+	println("trnData\n" + trnData)
 
 	val dictionary = trnData.groupBy(_(0))
-
+	
 	val typeCount = dictionary.count(p=>true)
-	for((category,array) <- dictionary)
-	{
-		var fIndex = 0
-		for( fIndex <- 0 to featureCount - 1)
-		{
-			var fArray = array.flatMap(f => extractIndex(stringList2DoubleList(f.tail), fIndex))
-			var mean = fArray.sum / fArray.length
-			var variance = fArray.flatMap(f=>div(f,mean)).sum/(fArray.length - 1)
-
-			meanList += mean
-			varianceList += variance
-		}
-	}
-	println("END")
-
+	def Avg(l:List[Double]):Double=l.sum/l.length
+	def Var(l:List[Double]):Double=l.flatMap(f=>div(f,Avg(l))).sum/(l.length - 1)
+	def extractIndex(v:List[Double], i:Int) = List(v(i))
+	def div(next:Double,mean:Double) = List( (next-mean)*(next-mean))
 
 	def stringList2DoubleList(il: List[String]): List[Double] = il.map(_.toDouble)
+	val groupedData=dictionary.map(g=>(0 to featureCount-1).toList.map(h=>g._2.flatMap(f => extractIndex(stringList2DoubleList(f.tail), h))))
+	val meanList=groupedData.map(f=>f.map(g=>Avg(g))).flatMap(f=>f).toList
+	val varianceList=groupedData.map(f=>f.map(g=>Var(g))).flatMap(f=>f).toList
+	
+	println("END")
 
 	/////////////test/////////////////////
 	val testdata = Source.fromFile("test.txt" ).getLines.toList.map(x => x.split("\t").toList)
@@ -160,14 +109,15 @@ object ContinueNB
 
 	def loop_predictAllData()
 	{
+		import java.io._
 		var writer = new PrintWriter(new File("out.txt"))
-		var fIndex = 0
+		val fIndex = 0
 		for( fIndex <- 0 to testdata.length - 1)
 		{
 			val ttt = loop_findMax(typeCount - 1, MyDouble(Double.MinValue), fIndex)
 			
 			writer.write(getactualTypeName(ttt))
-			var m = 0
+			val m = 0
 			for(m <- 1 to testdata(fIndex).length - 1 )
 			{
 				writer.write("\t" + testdata(fIndex)(m))
@@ -205,20 +155,7 @@ object ContinueNB
 
 	def getactualTypeName(m:MyDouble):String = 
 	{
-		var p = 0
-		var result = ""
-		for((category,array) <- dictionary)
-		{
-			if(p == m.i)
-			{
-				//println("" + category)
-				//println("P" + (m.a / 2))
-
-				result = category
-			}
-			p = p + 1
-		}
-		result
+		dictionary.keySet.toList(m.i)
 	}
 	def getP(m:Double, v:Double, x:Double): Double =
 	{
@@ -230,9 +167,5 @@ object ContinueNB
 		else
 			50
 	}
-	def extractIndex(v:List[Double], i:Int) = List(v(i))
-	def div(next:Double,mean:Double) = List( (next-mean)*(next-mean))
-
-
 
 }
